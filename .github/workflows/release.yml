@@ -1,16 +1,13 @@
-name: PR Builder for GraphicsUpscalerToggle
+name: Release GraphicsUpscalerToggle
 
 on:
-  pull_request:
-    branches: [ master ]
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
 
 jobs:
-
-  build:
+  release:
     runs-on: windows-2022
-
-    env:
-      Solution_Name: DalamudPlugins
 
     steps:
     - name: Checkout
@@ -26,14 +23,17 @@ jobs:
         Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
         Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
 
-    - name: Build with dotnet
+    - name: Build
       run: dotnet build --configuration Release
 
-    - name: Store artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: GraphicsUpscalerToggle
-        path: .\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle\*
-        if-no-files-found: error
-        retention-days: 1
+    - name: Package
+      run: |
+        $src = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle"
+        $zip = "GraphicsUpscalerToggle.zip"
+        Compress-Archive -Path "$src\*" -DestinationPath $zip
 
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: GraphicsUpscalerToggle.zip
+        generate_release_notes: true

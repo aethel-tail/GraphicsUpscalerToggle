@@ -1,0 +1,13 @@
+{
+  "Author": "aethel-tail",
+  "Name": "Graphics Upscaler Toggle",
+  "Punchline": "Auto-toggle graphics upscaling to re-engage DLSS on login",
+  "Description": "Automatically switches graphics upscaling from DLSS to FSR and back when entering the game. Works around the bug where DLSS doesn't properly engage on initial load and requires a manual toggle.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "graphics",
+    "upscaling",
+    "dlss",
+    "fsr"
+  ]
+}

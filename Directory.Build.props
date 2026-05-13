@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <Dalamud_HOME>$(AppData)\XIVLauncherCN\addon\Hooks\dev</Dalamud_HOME>
+  </PropertyGroup>
+</Project>
