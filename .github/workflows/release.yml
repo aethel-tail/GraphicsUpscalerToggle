@@ -35,7 +35,7 @@ jobs:
         $zip = "latest.zip"
         New-Item -ItemType Directory -Force -Path GraphicsUpscalerToggle
         Copy-Item -Path "$src\*" -Destination GraphicsUpscalerToggle\ -Recurse
-        Compress-Archive -Path GraphicsUpscalerToggle -DestinationPath $zip
+        Compress-Archive -Path GraphicsUpscalerToggle -DestinationPath $zip -Force
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
