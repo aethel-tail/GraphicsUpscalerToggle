@@ -26,8 +26,14 @@ jobs:
         Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
         Expand-Archive -Force latest.zip "$env:AppData\XIVLauncherCN\addon\Hooks\dev"
 
+    - name: Set version from tag
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $ver = $tag -replace '^v', ''
+        echo "VERSION=$ver" >> $env:GITHUB_ENV
+
     - name: Build
-      run: dotnet build --configuration Release
+      run: dotnet build --configuration Release -p:Version=$env:VERSION
 
     - name: Package
       run: |
