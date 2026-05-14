@@ -37,7 +37,7 @@ jobs:
 
     - name: Package
       run: |
-        $src = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle"
+        $src = ".\GraphicsUpscalerToggle\bin\x64\Release"
         $ver = "$env:VERSION"
         $zip = "latest.zip"
         Remove-Item -Recurse -Force publish -ErrorAction SilentlyContinue
