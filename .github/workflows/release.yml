@@ -37,9 +37,8 @@ jobs:
 
     - name: Package
       run: |
-        $src = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle"
-        $zip = "latest.zip"
-        Compress-Archive -Path "$src\*" -DestinationPath $zip -Force
+        $BuiltZip = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle\latest.zip"
+        Copy-Item -Path $BuiltZip -Destination "latest.zip" -Force
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
