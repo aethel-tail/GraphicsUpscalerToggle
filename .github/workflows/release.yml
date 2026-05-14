@@ -37,13 +37,9 @@ jobs:
 
     - name: Package
       run: |
-        $src = ".\GraphicsUpscalerToggle\bin\x64\Release"
-        $ver = "$env:VERSION"
+        $src = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle"
         $zip = "latest.zip"
-        Remove-Item -Recurse -Force publish -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path "publish\$ver"
-        Copy-Item -Path "$src\*" -Destination "publish\$ver\" -Recurse -Exclude "*.zip"
-        Compress-Archive -Path publish\* -DestinationPath $zip -Force
+        Compress-Archive -Path "$src\*" -DestinationPath $zip -Force
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
