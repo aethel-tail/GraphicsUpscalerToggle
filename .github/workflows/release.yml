@@ -39,9 +39,9 @@ jobs:
       run: |
         $src = ".\GraphicsUpscalerToggle\bin\x64\Release\GraphicsUpscalerToggle"
         $zip = "latest.zip"
-        New-Item -ItemType Directory -Force -Path GraphicsUpscalerToggle
-        Copy-Item -Path "$src\*" -Destination GraphicsUpscalerToggle\ -Recurse
-        Compress-Archive -Path GraphicsUpscalerToggle\* -DestinationPath $zip -Force
+        New-Item -ItemType Directory -Force -Path publish
+        Copy-Item -Path "$src\*" -Destination publish\ -Recurse
+        Compress-Archive -Path publish\* -DestinationPath $zip -Force
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
