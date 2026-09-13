@@ -10,7 +10,6 @@ public class Configuration : IPluginConfiguration
 
     public bool Enabled { get; set; } = true;
     public float LoginDelaySeconds { get; set; } = 0.5f;
-    public float ToggleIntervalSeconds { get; set; } = 3.0f;
 
     public void Save()
     {
