@@ -45,3 +45,44 @@ jobs:
       with:
         files: latest.zip
         generate_release_notes: true
+
+  sync-distribution:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Bump manifest version in DalamudPlugins
+      env:
+        GH_TOKEN: ${{ secrets.DALAMUDPLUGINS_TOKEN }}
+        PLUGIN: GraphicsUpscalerToggle
+      run: |
+        set -euo pipefail
+
+        if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9] ]]; then
+          echo "Not a version tag ($GITHUB_REF_NAME) — nothing to sync."
+          exit 0
+        fi
+
+        VER="${GITHUB_REF_NAME#v}"
+        REPO="aethel-tail/DalamudPlugins"
+        FILE="plugins/$PLUGIN/$PLUGIN.json"
+
+        manifest=$(gh api "repos/$REPO/contents/$FILE" --jq '.content' | base64 -d)
+        HAVE=$(jq -r '.AssemblyVersion' <<<"$manifest")
+        echo "manifest: $HAVE -> released: $VER"
+
+        if [[ "$HAVE" == "$VER" ]]; then
+          echo "Manifest already at $VER; nothing to do."
+          exit 0
+        fi
+
+        jq --arg v "$VER" '.AssemblyVersion = $v' <<<"$manifest" > /tmp/manifest.json
+        SHA=$(gh api "repos/$REPO/contents/$FILE" --jq '.sha')
+
+        gh api -X PUT "repos/$REPO/contents/$FILE" \
+          -f message="chore($PLUGIN): 版本同步至 $VER" \
+          -f content="$(base64 -w0 /tmp/manifest.json)" \
+          -f sha="$SHA" \
+          -f branch=main > /dev/null
+
+        echo "Bumped $FILE to $VER — the push triggers pluginmaster regeneration."
