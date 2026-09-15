@@ -27,12 +27,13 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CommandName = "/pupscaler";
 
-    // ponytail: fixed 1s settle; make configurable only if a rebuild ever needs longer
-    private const int RebuildSettleMs = 1000;
+    // Config-file enum (FFXIV.cfg / IGameConfig) — NOT the runtime GraphicsConfig enum, which is
+    // 0=Linear, 1=FSR, 2=DLSS. Writing runtime values through the config path lands on the wrong upscaler.
+    private const uint FsrConfigValue = 0;
+    private const uint DlssConfigValue = 1;
 
-    // Runtime enum in GraphicsConfig — NOT the config-file enum (cfg file uses 0=FSR, 1=DLSS).
-    // Runtime: 0=Linear/none, 1=FSR, 2=DLSS (confirmed via DP-CustomResolution's mapping + CN 7.55 test).
-    private const byte DlssRuntimeValue = 2;
+    // ponytail: fixed hold; the game only runs its display apply when the value actually changes
+    private const int FsrHoldMs = 3000;
 
     public Configuration Configuration { get; init; }
 
@@ -143,36 +144,26 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"Waiting {Configuration.LoginDelaySeconds}s before toggling...");
         await Task.Delay(loginDelay);
 
-        // The engine's rebuild drops WS_CAPTION for a moment and then sizes its render targets off the
-        // (captionless) client rect, so the guard and the style hooks must be up before we trigger it.
-        var guard = GuardWindowAsync(Process.GetCurrentProcess().MainWindowHandle, TimeSpan.FromSeconds(20));
+        // The config path (IGameConfig.Set) makes the game run its display apply, which is what actually
+        // re-creates the DLSS feature — that is what re-engages DLSS and lets OptiScaler take over. A
+        // struct write or a soft RequestResolutionChange does NOT do it (verified in-game: 60 vs 84 fps
+        // with identical GraphicsConfig/Device state). The apply drops WS_CAPTION for a moment and then
+        // sizes render targets off the captionless client rect, so the guard + style hooks must be up
+        // before the first Set, and must stay up for the whole apply.
+        var guard = GuardWindowAsync(Process.GetCurrentProcess().MainWindowHandle, TimeSpan.FromSeconds(40), 10000);
 
-        var originalValue = await Framework.RunOnFrameworkThread(GetUpscaleType);
-        Log.Information($"Current GraphicsRezoUpscaleType = {originalValue} (runtime enum: 0=Linear, 1=FSR, 2=DLSS)");
-        if (originalValue != DlssRuntimeValue)
-        {
-            await Framework.RunOnFrameworkThread(() => SetUpscaleType(DlssRuntimeValue));
-            Log.Information($"Set GraphicsRezoUpscaleType = {DlssRuntimeValue} (DLSS)");
-        }
+        // FSR first: writing the value the game already has triggers no apply at all.
+        await Framework.RunOnFrameworkThread(() => GameConfig.Set(SystemConfigOption.GraphicsRezoUpscaleType, FsrConfigValue));
+        Log.Information($"Set GraphicsRezoUpscaleType = {FsrConfigValue} (FSR, config enum)");
 
-        // Making the engine rebuild its render targets is what re-creates the upscaler, which is what
-        // actually re-engages DLSS after login (and lets OptiScaler hook in). A plain struct write only
-        // changes the stored value — the renderer never notices.
-        var client = await Framework.RunOnFrameworkThread(GetClientSize);
-        Log.Information($"Requesting render rebuild at {client.Width}x{client.Height} (current client size)");
-        await Framework.RunOnFrameworkThread(() => RequestRenderReset(true, client.Width, client.Height));
-        await Task.Delay(RebuildSettleMs);
-        await Framework.RunOnFrameworkThread(() => RequestRenderReset(false, null, null));
+        await Task.Delay(FsrHoldMs);
+
+        await Framework.RunOnFrameworkThread(() => GameConfig.Set(SystemConfigOption.GraphicsRezoUpscaleType, DlssConfigValue));
+        Log.Information($"Set GraphicsRezoUpscaleType = {DlssConfigValue} (DLSS, config enum)");
 
         await guard;
-        await Framework.RunOnFrameworkThread(LogSizes);
+        await Framework.RunOnFrameworkThread(DumpState);
         Log.Information("Upscaler toggle sequence complete.");
-    }
-
-    private static (uint Width, uint Height) GetClientSize()
-    {
-        NativeMethods.GetClientRect(Process.GetCurrentProcess().MainWindowHandle, out var client);
-        return ((uint)client.Right, (uint)client.Bottom);
     }
 
     private static unsafe byte GetUpscaleType()
@@ -285,7 +276,7 @@ public sealed class Plugin : IDalamudPlugin
         return ntUserSetWindowLongHook!.Original(hWnd, nIndex, dwNewLong, ansi);
     }
 
-    private static async Task GuardWindowAsync(IntPtr hwnd, TimeSpan maxDuration)
+    private static async Task GuardWindowAsync(IntPtr hwnd, TimeSpan maxDuration, int stableMs = 3000)
     {
         var savedStyle = NativeMethods.GetWindowLongPtrW(hwnd, NativeMethods.GWL_STYLE);
         Log.Information($"[guard] start: style=0x{savedStyle:X}");
@@ -299,7 +290,7 @@ public sealed class Plugin : IDalamudPlugin
         var repairs = 0;
 
         while (Environment.TickCount64 - started < maxDuration.TotalMilliseconds &&
-               Environment.TickCount64 - lastChange < 3000)
+               Environment.TickCount64 - lastChange < stableMs)
         {
             var style = NativeMethods.GetWindowLongPtrW(hwnd, NativeMethods.GWL_STYLE);
             if (style != savedStyle)
@@ -341,16 +332,22 @@ public sealed class Plugin : IDalamudPlugin
     private static unsafe void DumpState()
     {
         var g = GraphicsConfig.Instance();
+        var dev = Device.Instance();
+        var hwnd = Process.GetCurrentProcess().MainWindowHandle;
+        NativeMethods.GetClientRect(hwnd, out var client);
         Log.Information($"[dump] struct: RezoType={g->GraphicsRezoUpscaleType} RezoScale={g->GraphicsRezoScale} " +
+                        $"DynRezoEnable={g->DynamicRezoEnable} DynRezoThr={g->DynamicRezoThreshold} " +
+                        $"DynRezoCutScene={g->DynamicRezoEnableCutScene} " +
                         $"ReflectionType={g->ReflectionType} ShadowLOD={g->ShadowLOD} Tessellation={g->Tessellation} " +
-                        $"GlareRepr={g->GlareRepresentation} DynRezoThr={g->DynamicRezoThreshold} " +
-                        $"GrassDynInterf={g->GrassEnableDynamicInterference} DynRezoCutScene={g->DynamicRezoEnableCutScene} Gamma={g->Gamma}");
+                        $"GlareRepr={g->GlareRepresentation} GrassDynInterf={g->GrassEnableDynamicInterference} Gamma={g->Gamma}");
+        Log.Information($"[dump] device {dev->Width}x{dev->Height} | client {client.Right}x{client.Bottom}");
 
         string[] keys =
         [
-            "GraphicsRezoUpscaleType", "GraphicsRezoScale", "ReflectionType_DX11", "ShadowLOD_DX11",
-            "Tessellation_DX11", "GlareRepresentation_DX11", "DynamicRezoThreshold",
-            "GrassEnableDynamicInterference", "DynamicRezoEnableCutScene", "Gamma",
+            "GraphicsRezoUpscaleType", "GraphicsRezoScale", "DynamicRezoType", "DynamicRezoEnableCutScene",
+            "DynamicRezoThreshold", "ReflectionType_DX11", "ShadowLOD_DX11",
+            "Tessellation_DX11", "GlareRepresentation_DX11",
+            "GrassEnableDynamicInterference", "Gamma",
         ];
         foreach (var key in keys)
         {
@@ -430,6 +427,27 @@ public sealed class Plugin : IDalamudPlugin
                 ? "[UpscalerToggle] Requested resolution change (window guard active)"
                 : $"[UpscalerToggle] Requested resolution change to {targetW}x{targetH} (window guard active)");
         }
+        else if (args == "cfgseq")
+        {
+            // Config path — exactly what the in-game settings UI does, which is the path that reliably
+            // re-creates the DLSS feature so OptiScaler can take it over. The window guard + style
+            // hooks are up for the whole apply, which is what the old unguarded version was missing.
+            Task.Run(async () =>
+            {
+                var guard = GuardWindowAsync(Process.GetCurrentProcess().MainWindowHandle, TimeSpan.FromSeconds(40), 10000);
+
+                await Framework.RunOnFrameworkThread(() => GameConfig.Set(SystemConfigOption.GraphicsRezoUpscaleType, 0U));
+                Log.Information("[cfgseq] IGameConfig.Set(GraphicsRezoUpscaleType, 0) — FSR");
+                await Task.Delay(3000);
+                await Framework.RunOnFrameworkThread(() => GameConfig.Set(SystemConfigOption.GraphicsRezoUpscaleType, 1U));
+                Log.Information("[cfgseq] IGameConfig.Set(GraphicsRezoUpscaleType, 1) — DLSS");
+
+                await guard;
+                await Framework.RunOnFrameworkThread(DumpState);
+                ChatGui.Print("[UpscalerToggle] cfgseq done — compare FPS / window / xllog");
+            });
+            ChatGui.Print("[UpscalerToggle] Config-path toggle with window guard started");
+        }
         else if (args == "sizes")
         {
             LogSizes();
@@ -494,7 +512,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         else
         {
-            ChatGui.Print("[UpscalerToggle] Usage: on|off|status|toggle|get|set <n>|cfg <n>|mode <n>|scale <pct>|reset [w h]|sizes");
+            ChatGui.Print("[UpscalerToggle] Usage: on|off|status|toggle|get|set <n>|cfg <n>|cfgseq|mode <n>|scale <pct>|reset [w h]|sizes");
         }
     }
 

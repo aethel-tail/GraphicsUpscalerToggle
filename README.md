@@ -31,13 +31,13 @@ FFXIV Dalamud 插件。登录时自动将图形上采样从 DLSS 切换为 FSR �
 
 1. 检测玩家登录
 2. 等待 `Login Delay` 秒
-3. 确认上采样类型为 DLSS（运行时值 2）
-4. 触发引擎重建渲染目标 —— 这一步才会真正重建升采样器，让 DLSS（及 OptiScaler 等外部工具）生效
-5. 全程有窗口守卫：拦截游戏在重建时去掉 `WS_CAPTION` 的动作，保证窗口边框与分辨率不受影响
+3. 启动窗口守卫（拦截游戏在重应用显示设置时抹掉窗口边框的动作）
+4. 通过 `IGameConfig.Set` 把上采样类型设为 FSR（配置枚举 0），等待 3 秒
+5. 再设回 DLSS（配置枚举 1）—— 这一步会让游戏真正重应用显示设置、**重建 DLSS 特性**，从而让 DLSS 生效（含 OptiScaler 等外部工具接管）
 
-> 注：不能通过 `IGameConfig.Set` 改上采样类型——它会触发游戏的配置变更回调并完整重应用图像设置，在窗口化模式下会破坏窗口状态（边框消失、分辨率异常，参见 goatcorp/Dalamud#2964）。现在走的是「FFXIVClientStructs 直接写 `GraphicsConfig` + 受保护的引擎重建」。
+> 为什么必须是配置路径：实测「直接写 `GraphicsConfig` 结构体」和「软性 `RequestResolutionChange`」都只跑到 ~60 帧，而配置路径能到 ~84 帧——两种情况下的 `GraphicsConfig`/`Device`/cfg 状态**完全一致**，差别在渲染器内部的 DLSS 特性创建。结构体写法不会触发这一步。
 >
-> 另注意：**结构体里的枚举与配置文件不同**——配置文件 `0=FSR, 1=DLSS`，运行时结构体 `0=无, 1=FSR, 2=DLSS`。写错值不会报错，只会静静地留在 FSR。
+> 另注意：**两套枚举不能混用**——配置文件/`IGameConfig` 是 `0=FSR, 1=DLSS`，运行时 `GraphicsConfig` 是 `0=无, 1=FSR, 2=DLSS`；写错会静默地落在错误的上采样器上。
 
 ## 构建
 

@@ -31,13 +31,13 @@ Open via `/pupscaler` → settings window, or through Dalamud plugin settings.
 
 1. Detects player login
 2. Waits `Login Delay` seconds
-3. Ensures the upscaler is set to DLSS (runtime value 2)
-4. Triggers an engine render-target rebuild — this is what re-creates the upscaler and actually engages DLSS (and lets tools like OptiScaler hook in)
-5. A window guard runs throughout: it blocks the game from dropping `WS_CAPTION` during the rebuild, so the window border and resolution stay intact
+3. Starts the window guard (blocks the game from dropping the window frame style while it re-applies display settings)
+4. Sets the upscaler to FSR (config enum 0) through `IGameConfig.Set`, waits 3 seconds
+5. Sets it back to DLSS (config enum 1) — this is what makes the game re-apply display settings and **re-create the DLSS feature**, which is what actually engages DLSS (and lets tools like OptiScaler take over)
 
-> Note: the upscaler type is not changed via `IGameConfig.Set` — that fires the game's config-change callback, which re-applies graphics settings and corrupts the window in windowed mode (border lost, bogus resolution; see goatcorp/Dalamud#2964). The plugin uses a direct FFXIVClientStructs write to `GraphicsConfig` plus a guarded engine rebuild instead.
+> Why the config path is required: measured in-game, both a direct `GraphicsConfig` struct write and a soft `RequestResolutionChange` settle at ~60 fps while the config path reaches ~84 fps — with byte-identical `GraphicsConfig`/`Device`/cfg state in both cases. The difference is the renderer's internal DLSS feature creation, which a struct write never triggers.
 >
-> Also note: **the runtime enum differs from the config file** — cfg uses `0=FSR, 1=DLSS`, the runtime struct uses `0=none, 1=FSR, 2=DLSS`. Writing a wrong value fails silently and leaves the game on FSR.
+> Also note: **the two enums must not be mixed** — config file / `IGameConfig` uses `0=FSR, 1=DLSS`, the runtime `GraphicsConfig` uses `0=none, 1=FSR, 2=DLSS`. Writing one into the other fails silently on the wrong upscaler.
 
 ## Build
 

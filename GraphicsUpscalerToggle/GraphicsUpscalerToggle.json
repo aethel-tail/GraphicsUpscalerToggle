@@ -1,8 +1,8 @@
 {
   "Author": "aethel-tail",
   "Name": "Graphics Upscaler Toggle",
-  "Punchline": "Re-engages DLSS on login via a guarded engine rebuild",
-  "Description": "Triggers a render-target rebuild after login so the engine re-creates its upscaler (which re-engages DLSS and lets proxies such as OptiScaler hook in), while blocking the game from dropping the window frame style during the rebuild so the window and resolution stay untouched. Works around the bug where DLSS doesn't properly engage on initial load and requires a manual toggle.",
+  "Punchline": "Re-engages DLSS on login (guarded display re-apply)",
+  "Description": "Re-applies the game's display settings on login so the DLSS feature is properly re-created — that is what re-engages DLSS and lets upscaler proxies such as OptiScaler take over — while a window guard keeps the game from dropping the window frame style during the apply. Works around the bug where DLSS doesn't properly engage on initial load and requires a manual toggle.",
   "IconUrl": "https://raw.githubusercontent.com/aethel-tail/DalamudPlugins/master/plugins/GraphicsUpscalerToggle/images/icon.png",
   "ApplicableVersion": "any",
   "Tags": [
